@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KUMTHRA LLC.</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #f0fdf4; /* Light green bg */
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; /* Prevent scrolling while drawing */
+            touch-action: none; /* Prevent pull-to-refresh on mobile */
+            margin: 0;
+            padding: 0;
+        }
+        
+        .canvas-container {
+            cursor: crosshair;
+            background-image: 
+                radial-gradient(#dcfce7 1px, transparent 1px),
+                radial-gradient(#dcfce7 1px, transparent 1px);
+            background-size: 20px 20px;
+            background-position: 0 0, 10px 10px;
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center">
+
+    <!-- Canvas Area (Full Screen-ish) -->
+    <div class="relative w-full flex-grow bg-white overflow-hidden canvas-container" id="canvas-wrapper">
+        
+        <!-- The Quote -->
+        <div class="absolute top-8 left-0 w-full text-center pointer-events-none select-none z-10 px-4">
+            <p id="daily-quote" class="text-lime-800/40 font-serif italic text-3xl transition-opacity duration-500">"The world is your pear."</p>
+        </div>
+
+        <canvas id="pearCanvas" class="block w-full h-full"></canvas>
+        
+        <!-- Floating instruction for empty state (Simplified) -->
+        <div id="instructions" class="absolute inset-0 flex items-center justify-center pointer-events-none opacity-50">
+            <p class="text-lime-300 text-2xl font-bold">Draw</p>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="w-full py-2 text-center text-lime-800/40 text-xs font-sans bg-[#f0fdf4] select-none">
+        &copy; 2025 Kumthra LLC. All rights preserved.
+    </footer>
+
+    <script>
+        const canvas = document.getElementById('pearCanvas');
+        const ctx = canvas.getContext('2d');
+        const wrapper = document.getElementById('canvas-wrapper');
+        const instructions = document.getElementById('instructions');
+        const quoteElement = document.getElementById('daily-quote');
+
+        // Pear Quotes Logic
+        const pearQuotes = [
+            "The world is your pear.",
+            "We make a great pear.",
+            "Do not des-pear.",
+            "Life is simply pear-fect.",
+            "Grin and pear it.",
+            "Nothing com-pears to you.",
+            "This is ap-pear-ent.",
+            "Pear pressure is real.",
+            "Living the sweet life.",
+            "Just ap-pear-ing here."
+        ];
+
+        // Set random quote on load
+        function setRandomQuote() {
+            const randomIndex = Math.floor(Math.random() * pearQuotes.length);
+            quoteElement.innerText = `"${pearQuotes[randomIndex]}"`;
+        }
+        setRandomQuote();
+
+        let isDrawing = false;
+        let lastX = 0;
+        let lastY = 0;
+        let baseSize = 20; // Reduced size from 50
+        let hasDrawn = false;
+
+        // Configuration
+        const PEAR_EMOJI = '🍐';
+        
+        // Resize canvas to fit container
+        function resizeCanvas() {
+            let tempCanvas = null;
+
+            // Save current content only if canvas has valid dimensions
+            if (canvas.width > 0 && canvas.height > 0) {
+                tempCanvas = document.createElement('canvas');
+                tempCanvas.width = canvas.width;
+                tempCanvas.height = canvas.height;
+                const tempCtx = tempCanvas.getContext('2d');
+                tempCtx.drawImage(canvas, 0, 0);
+            }
+
+            // Resize
+            const rect = wrapper.getBoundingClientRect();
+            // Ensure we don't set invalid dimensions
+            if (rect.width > 0 && rect.height > 0) {
+                canvas.width = rect.width;
+                canvas.height = rect.height;
+            }
+
+            // Restore content
+            if (hasDrawn && tempCanvas) {
+                ctx.drawImage(tempCanvas, 0, 0);
+            }
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        // Initial size
+        setTimeout(resizeCanvas, 10);
+
+        function getCoordinates(e) {
+            const rect = canvas.getBoundingClientRect();
+            let clientX, clientY;
+
+            if (e.touches && e.touches.length > 0) {
+                clientX = e.touches[0].clientX;
+                clientY = e.touches[0].clientY;
+            } else {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            return {
+                x: clientX - rect.left,
+                y: clientY - rect.top
+            };
+        }
+
+        // The core drawing function
+        function drawPear(x, y) {
+            ctx.save();
+            ctx.translate(x, y);
+            
+            // Randomize rotation slightly (-30 to 30 degrees)
+            const angle = (Math.random() - 0.5) * 60 * Math.PI / 180;
+            ctx.rotate(angle);
+            
+            // Randomize size slightly (+- 20%) to look natural
+            const randomScale = 0.8 + Math.random() * 0.4;
+            const size = baseSize * randomScale;
+
+            ctx.font = `${size}px serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            // Removed shadow for clarity
+            
+            ctx.fillText(PEAR_EMOJI, 0, 0);
+            
+            ctx.restore();
+        }
+
+        // Linear interpolation to fill gaps between fast mouse movements
+        function drawLine(x1, y1, x2, y2) {
+            const dist = Math.hypot(x2 - x1, y2 - y1);
+            const angle = Math.atan2(y2 - y1, x2 - x1);
+            
+            // Density: Draw a pear every (size / 3) pixels
+            const stepSize = baseSize / 3;
+            
+            for (let i = 0; i < dist; i += stepSize) {
+                const x = x1 + Math.cos(angle) * i;
+                const y = y1 + Math.sin(angle) * i;
+                drawPear(x, y);
+            }
+            // Ensure the final point is drawn
+            drawPear(x2, y2);
+        }
+
+        function startDrawing(e) {
+            e.preventDefault();
+            isDrawing = true;
+            
+            if (!hasDrawn) {
+                hasDrawn = true;
+                instructions.style.display = 'none';
+            }
+
+            const coords = getCoordinates(e);
+            lastX = coords.x;
+            lastY = coords.y;
+            drawPear(lastX, lastY); // Draw single dot
+        }
+
+        function draw(e) {
+            if (!isDrawing) return;
+            e.preventDefault();
+
+            const coords = getCoordinates(e);
+            drawLine(lastX, lastY, coords.x, coords.y);
+            
+            lastX = coords.x;
+            lastY = coords.y;
+        }
+
+        function stopDrawing() {
+            isDrawing = false;
+        }
+
+        // Event Listeners - Mouse
+        canvas.addEventListener('mousedown', startDrawing);
+        canvas.addEventListener('mousemove', draw);
+        canvas.addEventListener('mouseup', stopDrawing);
+        canvas.addEventListener('mouseout', stopDrawing);
+
+        // Event Listeners - Touch
+        canvas.addEventListener('touchstart', startDrawing);
+        canvas.addEventListener('touchmove', draw);
+        canvas.addEventListener('touchend', stopDrawing);
+
+    </script>
+</body>
+</html>
